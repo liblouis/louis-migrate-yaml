@@ -6,6 +6,8 @@ use clap::Parser;
 
 use anyhow::{bail, Result};
 
+mod normalized;
+
 /// A migration tool to "normalize" the liblouis yaml test files
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
