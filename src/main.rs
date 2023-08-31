@@ -180,6 +180,16 @@ fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
     }
 }
 
+fn parse_xfail_value(iter: &mut ParserIter) -> Result<bool> {
+    let xfail = match iter.next() {
+	Some(Ok(Event::Scalar { value, .. })) if value == "off" => false,
+	Some(Ok(Event::Scalar { value, .. })) if value == "false" => false,
+	Some(Ok(Event::Scalar { value, .. })) => true,
+	_ => bail!("expected scalar xfail value")
+    };
+    Ok(xfail)
+}
+
 fn parse_test(iter: &mut ParserIter) -> Result<Test> {
     let input: String;
     let expected: String;
@@ -193,14 +203,42 @@ fn parse_test(iter: &mut ParserIter) -> Result<Test> {
     } else {
         bail!("expected Scalar")
     };
-    let Some(Ok(Event::SequenceEnd)) = iter.next() else {
-	bail!("expected SequenceEnd")
-    };
-    Ok(Test {
-        input,
-        expected,
-	..Default::default()
-    })
+    match iter.next() {
+	Some(Ok(Event::SequenceEnd)) => {
+	    Ok(Test {
+		input,
+		expected,
+		..Default::default()
+	    })
+	}
+	Some(Ok(Event::MappingStart { .. })) => {
+	    let mut xfail = false;
+	    while let Some(Ok(event)) = iter.next() {
+		match event {
+		    Event::Scalar { ref value, .. } if value == "xfail" => {
+			xfail = parse_xfail_value(iter)?;
+		    }
+		    Event::MappingEnd => {
+			break;
+		    }
+		    _ => {
+			bail!("expected Scalar or MappingEnd, got {:?}", event);
+		    }
+		}
+	    }
+	    let Some(Ok(Event::SequenceEnd)) = iter.next() else {
+	     	bail!("expected SequenceEnd")
+	    };
+	    Ok(Test {
+		input,
+		expected,
+		xfail,
+		..Default::default()
+	    })
+	    // handle options
+	}
+	_ => bail!("expected SequenceEnd or MappingStart")
+    }
 }
 
 fn parse_tests(iter: &mut ParserIter) -> Result<Vec<Test>> {
