@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use std::{
     fs::{self, File},
-    path::PathBuf,
+    path::PathBuf, collections::HashSet,
 };
 
 use libyaml::{self, Encoding, Event, ParserIter};
@@ -50,6 +50,18 @@ pub struct TestSuite {
     tests: Vec<Test>,
 }
 
+#[derive(Debug, Hash, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Mode {
+    NoContractions,
+    CompbrlAtCursor,
+    DotsIo,
+    CompbrlLeftCursor,
+    UcBrl,
+    NoUndefined,
+    PartialTrans
+}
+
 fn is_false(b: &bool) -> bool {
     !(*b)
 }
@@ -60,6 +72,17 @@ pub struct Test {
     expected: String,
     #[serde(skip_serializing_if = "is_false")]
     xfail: bool,
+    //    typeform:
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    input_pos: Vec<u16>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    output_pos: Vec<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cursor_pos: Option<u16>,
+    #[serde(skip_serializing_if = "HashSet::is_empty")]
+    mode: HashSet<Mode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_output_length: Option<u16>
 }
 
 fn parse_display_table(iter: &mut ParserIter) -> Result<PathBuf> {
@@ -155,7 +178,6 @@ fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
 fn parse_test(iter: &mut ParserIter) -> Result<Test> {
     let input: String;
     let expected: String;
-    let xfail = false;
     if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
         input = value;
     } else {
@@ -172,7 +194,7 @@ fn parse_test(iter: &mut ParserIter) -> Result<Test> {
     Ok(Test {
         input,
         expected,
-        xfail,
+	..Default::default()
     })
 }
 
