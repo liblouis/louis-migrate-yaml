@@ -51,7 +51,7 @@ pub struct TestSuite {
 }
 
 fn is_false(b: &bool) -> bool {
-    *b == false
+    !(*b)
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -79,7 +79,7 @@ fn parse_table(iter: &mut ParserIter) -> Result<Table> {
             Event::Scalar { ref value, .. } if value == "language" => {
                 if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
                     table = Table {
-                        language: value.into(),
+                        language: value,
                         ..table
                     }
                 } else {
@@ -99,7 +99,7 @@ fn parse_table(iter: &mut ParserIter) -> Result<Table> {
             Event::Scalar { ref value, .. } if value == "system" => {
                 if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
                     table = Table {
-                        system: value.into(),
+                        system: value,
                         ..table
                     };
                 } else {
@@ -157,12 +157,12 @@ fn parse_test(iter: &mut ParserIter) -> Result<Test> {
     let expected: String;
     let xfail = false;
     if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-        input = value.into();
+        input = value;
     } else {
         bail!("expected Scalar")
     };
     if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-        expected = value.into();
+        expected = value;
     } else {
         bail!("expected Scalar")
     };
