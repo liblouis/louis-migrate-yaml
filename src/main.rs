@@ -152,26 +152,31 @@ fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
     let Some(Ok(Event::MappingStart { .. })) = iter.next() else {
 	bail!("expected MappingStart")
     };
-    if let Some(Ok(event)) = iter.next() {
-        let mode = match event {
-            Event::Scalar { ref value, .. } if value == "forward" => TestMode::Forward,
-            Event::Scalar { ref value, .. } if value == "backward" => TestMode::Backward,
-            Event::Scalar { ref value, .. } if value == "bothDirections" => {
-                TestMode::BothDirections
-            }
-            Event::Scalar { ref value, .. } if value == "display" => TestMode::Display,
-            Event::Scalar { ref value, .. } if value == "hyphenate" => TestMode::Hyphenate,
-            Event::Scalar { ref value, .. } if value == "hyphenateBraille" => {
-                TestMode::HyphenateBraille
-            }
-            _ => bail!("Testmode {:?} not supported", event),
-        };
-        let Some(Ok(Event::MappingEnd)) = iter.next() else {
-	    bail!("expected MappingEnd")
-	};
-        Ok(mode)
-    } else {
-        bail!("Expected Scalar");
+    match iter.next() {
+	Some(Ok(Event::Scalar { ref value, .. })) if value == "testmode" => {
+	    if let Some(Ok(event)) = iter.next() {
+		let mode = match event {
+		    Event::Scalar { ref value, .. } if value == "forward" => TestMode::Forward,
+		    Event::Scalar { ref value, .. } if value == "backward" => TestMode::Backward,
+		    Event::Scalar { ref value, .. } if value == "bothDirections" => {
+			TestMode::BothDirections
+		    }
+		    Event::Scalar { ref value, .. } if value == "display" => TestMode::Display,
+		    Event::Scalar { ref value, .. } if value == "hyphenate" => TestMode::Hyphenate,
+		    Event::Scalar { ref value, .. } if value == "hyphenateBraille" => {
+			TestMode::HyphenateBraille
+		    }
+		    _ => bail!("Testmode {:?} not supported", event),
+		};
+		let Some(Ok(Event::MappingEnd)) = iter.next() else {
+		    bail!("expected MappingEnd")
+		};
+		Ok(mode)
+	    } else {
+		bail!("expected Scalar");
+	    }
+	}
+	_ => bail!("expected Scalar testmode")
     }
 }
 
