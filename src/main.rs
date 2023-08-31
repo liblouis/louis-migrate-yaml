@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use std::{fs::File, path::PathBuf};
+use std::{fs::{File, self}, path::PathBuf};
 
 use libyaml::{self, Encoding, Event, ParserIter};
 
@@ -14,6 +14,9 @@ use anyhow::{bail, Result};
 struct Args {
     /// The yaml file to convert
     yaml: PathBuf,
+    /// Write output to FILE instead of stdout.
+    #[arg(short, long)]
+    output: Option<PathBuf>
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
@@ -218,8 +221,16 @@ fn main() -> Result<()> {
     };
 
     let test_suite = TestSuite{ display_table, table, mode: test_mode, tests };
+    let yaml = serde_yaml::to_string(&test_suite)?;
 
-    println!("{}", serde_yaml::to_string(&test_suite)?);
+    match args.output {
+	Some(path) => {
+	    fs::write(path, yaml)?;
+	}
+	None => {
+	    println!("{}", yaml);
+	}
+    }
 
     Ok(())
 }
