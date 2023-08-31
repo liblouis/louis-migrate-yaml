@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use std::{fs::File, path::PathBuf};
 
 use libyaml::{self, Encoding, Event, ParserIter};
@@ -5,8 +7,6 @@ use libyaml::{self, Encoding, Event, ParserIter};
 use clap::Parser;
 
 use anyhow::{bail, Result};
-
-mod normalized;
 
 /// A migration tool to "normalize" the liblouis yaml test files
 #[derive(Parser, Debug)]
@@ -16,17 +16,19 @@ struct Args {
     yaml: PathBuf,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 enum TestMode {
+    #[default]
     Forward,
     Backward,
     BothDirections,
+    Display,
     Hyphenate,
     HyphenateBraille,
-    Display,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
 struct Table {
     language: String,
     grade: u8,
@@ -34,13 +36,27 @@ struct Table {
     path: PathBuf,
 }
 
-#[derive(Debug)]
-struct Test {
-    input: String,
-    expected: String,
+#[derive(Debug, Default, Serialize)]
+pub struct TestSuite {
+    display_table: PathBuf,
+    table: Table,
+    mode: TestMode,
+    tests: Vec<Test>,
 }
 
-fn parse_display_table(iter: &mut ParserIter) -> Result<String> {
+fn is_false(b: &bool) -> bool {
+    *b == false
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct Test {
+    input: String,
+    expected: String,
+    #[serde(skip_serializing_if = "is_false")]
+    xfail: bool
+}
+
+fn parse_display_table(iter: &mut ParserIter) -> Result<PathBuf> {
     match iter.next() {
 	Some(Ok(Event::Scalar { value, .. })) => Ok(value.into()),
 	_ => bail!("expected Scalar for display")
@@ -98,6 +114,7 @@ fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
             Event::Scalar { ref value, .. } if value == "forward" => TestMode::Forward,
             Event::Scalar { ref value, .. } if value == "backward" => TestMode::Backward,
             Event::Scalar { ref value, .. } if value == "bothDirections" => TestMode::BothDirections,
+            Event::Scalar { ref value, .. } if value == "display" => TestMode::Display,
             Event::Scalar { ref value, .. } if value == "hyphenate" => TestMode::Hyphenate,
             Event::Scalar { ref value, .. } if value == "hyphenateBraille" => TestMode::HyphenateBraille,
 	    _ => bail!("Testmode {:?} not supported", event)
@@ -114,6 +131,7 @@ fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
 fn parse_test(iter: &mut ParserIter) -> Result<Test> {
     let input: String;
     let expected: String;
+    let xfail = false;
     if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
 	input = value.into();
     } else {
@@ -127,7 +145,7 @@ fn parse_test(iter: &mut ParserIter) -> Result<Test> {
     let Some(Ok(Event::SequenceEnd)) = iter.next() else {
 	bail!("expected SequenceEnd")
     };
-    Ok(dbg!(Test{ input, expected }))
+    Ok(Test{input, expected, xfail })
 }
 
 fn parse_tests(iter: &mut ParserIter) -> Result<Vec<Test>> {
@@ -173,13 +191,12 @@ fn main() -> Result<()> {
 	bail!("expected MappingStart")
     };
 
-    let mut display_table: String = "".into();
+    let mut display_table = Default::default();
     let mut table: Table = Default::default();
     let mut test_mode: TestMode = TestMode::Forward;
     let mut tests: Vec<Test> = Vec::new();
     
     while let Some(Ok(event)) = iter.next() {
-        println!("{:?}", event);
         match event {
             Event::Scalar { ref value, .. } if value == "display" => display_table = parse_display_table(&mut iter)?,
             Event::Scalar { ref value, .. } if value == "table" => table = parse_table(&mut iter)?,
@@ -200,9 +217,9 @@ fn main() -> Result<()> {
 	bail!("expected StreamEnd")
     };
 
-    println!("Display Table: {:?}", display_table);
-    println!("Table: {:?}", table);
-    println!("Flags: {:?}", test_mode);
-    println!("Tests: {:?}", tests);
+    let test_suite = TestSuite{ display_table, table, mode: test_mode, tests };
+
+    println!("{}", serde_yaml::to_string(&test_suite)?);
+
     Ok(())
 }
