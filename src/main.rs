@@ -241,6 +241,7 @@ fn main() -> Result<()> {
 	bail!("expected MappingStart")
     };
 
+    let mut test_suites: Vec<TestSuite> = Vec::new();
     let mut display_table = Default::default();
     let mut table: Table = Default::default();
     let mut test_mode: TestMode = TestMode::Forward;
@@ -279,7 +280,10 @@ fn main() -> Result<()> {
         mode: test_mode,
         tests,
     };
-    let yaml = serde_yaml::to_string(&test_suite)?;
+
+    test_suites.push(test_suite);
+
+    let yaml = serde_yaml::to_string(&test_suites)?;
 
     match args.output {
         Some(path) => {
