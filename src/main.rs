@@ -1,6 +1,9 @@
 use serde::Serialize;
 
-use std::{fs::{File, self}, path::PathBuf};
+use std::{
+    fs::{self, File},
+    path::PathBuf,
+};
 
 use libyaml::{self, Encoding, Event, ParserIter};
 
@@ -16,7 +19,7 @@ struct Args {
     yaml: PathBuf,
     /// Write output to FILE instead of stdout.
     #[arg(short, long)]
-    output: Option<PathBuf>
+    output: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
@@ -56,13 +59,13 @@ pub struct Test {
     input: String,
     expected: String,
     #[serde(skip_serializing_if = "is_false")]
-    xfail: bool
+    xfail: bool,
 }
 
 fn parse_display_table(iter: &mut ParserIter) -> Result<PathBuf> {
     match iter.next() {
-	Some(Ok(Event::Scalar { value, .. })) => Ok(value.into()),
-	_ => bail!("expected Scalar for display")
+        Some(Ok(Event::Scalar { value, .. })) => Ok(value.into()),
+        _ => bail!("expected Scalar for display"),
     }
 }
 
@@ -72,38 +75,52 @@ fn parse_table(iter: &mut ParserIter) -> Result<Table> {
     };
     let mut table: Table = Default::default();
     while let Some(Ok(event)) = iter.next() {
-	match event {
+        match event {
             Event::Scalar { ref value, .. } if value == "language" => {
-		if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-		    table = Table{language: value.into(), ..table}
-		} else {
-		    bail!("Epected Scalar");
-		}
-	    },
+                if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
+                    table = Table {
+                        language: value.into(),
+                        ..table
+                    }
+                } else {
+                    bail!("Epected Scalar");
+                }
+            }
             Event::Scalar { ref value, .. } if value == "grade" => {
-		if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-		    table = Table{grade: value.parse::<u8>()?, ..table}
-		} else {
-		    bail!("Epected Scalar");
-		}
-	    },
+                if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
+                    table = Table {
+                        grade: value.parse::<u8>()?,
+                        ..table
+                    }
+                } else {
+                    bail!("Epected Scalar");
+                }
+            }
             Event::Scalar { ref value, .. } if value == "system" => {
-		if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-		    table = Table{system: value.into(), ..table};
-		} else {
-		    bail!("Epected Scalar");
-		}
-	    },
+                if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
+                    table = Table {
+                        system: value.into(),
+                        ..table
+                    };
+                } else {
+                    bail!("Epected Scalar");
+                }
+            }
             Event::Scalar { ref value, .. } if value == "__assert-match" => {
-		if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-		    table = Table{path: value.into(), ..table};
-		} else {
-		    bail!("Epected Scalar");
-		}
-	    },
-	    Event::MappingEnd => {break;},
-	    _ => bail!("Event {:?}", event)
-	};
+                if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
+                    table = Table {
+                        path: value.into(),
+                        ..table
+                    };
+                } else {
+                    bail!("Epected Scalar");
+                }
+            }
+            Event::MappingEnd => {
+                break;
+            }
+            _ => bail!("Event {:?}", event),
+        };
     }
     Ok(table)
 }
@@ -113,21 +130,25 @@ fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
 	bail!("expected MappingStart")
     };
     if let Some(Ok(event)) = iter.next() {
-	let mode = match event {
+        let mode = match event {
             Event::Scalar { ref value, .. } if value == "forward" => TestMode::Forward,
             Event::Scalar { ref value, .. } if value == "backward" => TestMode::Backward,
-            Event::Scalar { ref value, .. } if value == "bothDirections" => TestMode::BothDirections,
+            Event::Scalar { ref value, .. } if value == "bothDirections" => {
+                TestMode::BothDirections
+            }
             Event::Scalar { ref value, .. } if value == "display" => TestMode::Display,
             Event::Scalar { ref value, .. } if value == "hyphenate" => TestMode::Hyphenate,
-            Event::Scalar { ref value, .. } if value == "hyphenateBraille" => TestMode::HyphenateBraille,
-	    _ => bail!("Testmode {:?} not supported", event)
-	};
-	let Some(Ok(Event::MappingEnd)) = iter.next() else {
+            Event::Scalar { ref value, .. } if value == "hyphenateBraille" => {
+                TestMode::HyphenateBraille
+            }
+            _ => bail!("Testmode {:?} not supported", event),
+        };
+        let Some(Ok(Event::MappingEnd)) = iter.next() else {
 	    bail!("expected MappingEnd")
 	};
-	Ok(mode)
+        Ok(mode)
     } else {
-	bail!("Expected Scalar");
+        bail!("Expected Scalar");
     }
 }
 
@@ -136,19 +157,23 @@ fn parse_test(iter: &mut ParserIter) -> Result<Test> {
     let expected: String;
     let xfail = false;
     if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-	input = value.into();
+        input = value.into();
     } else {
-	bail!("expected Scalar")
+        bail!("expected Scalar")
     };
     if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-	expected = value.into();
+        expected = value.into();
     } else {
-	bail!("expected Scalar")
+        bail!("expected Scalar")
     };
     let Some(Ok(Event::SequenceEnd)) = iter.next() else {
 	bail!("expected SequenceEnd")
     };
-    Ok(Test{input, expected, xfail })
+    Ok(Test {
+        input,
+        expected,
+        xfail,
+    })
 }
 
 fn parse_tests(iter: &mut ParserIter) -> Result<Vec<Test>> {
@@ -160,10 +185,10 @@ fn parse_tests(iter: &mut ParserIter) -> Result<Vec<Test>> {
         if event == Event::SequenceEnd {
             break;
         };
-	let Event::SequenceStart { .. } = event else {
+        let Event::SequenceStart { .. } = event else {
 	    bail!("expected SequenceStart, got {:?}", event)
 	};
-	tests.push(parse_test(iter)?);
+        tests.push(parse_test(iter)?);
     }
     Ok(tests)
 }
@@ -198,14 +223,20 @@ fn main() -> Result<()> {
     let mut table: Table = Default::default();
     let mut test_mode: TestMode = TestMode::Forward;
     let mut tests: Vec<Test> = Vec::new();
-    
+
     while let Some(Ok(event)) = iter.next() {
         match event {
-            Event::Scalar { ref value, .. } if value == "display" => display_table = parse_display_table(&mut iter)?,
+            Event::Scalar { ref value, .. } if value == "display" => {
+                display_table = parse_display_table(&mut iter)?
+            }
             Event::Scalar { ref value, .. } if value == "table" => table = parse_table(&mut iter)?,
-            Event::Scalar { ref value, .. } if value == "flags" => test_mode = parse_flags(&mut iter)?,
+            Event::Scalar { ref value, .. } if value == "flags" => {
+                test_mode = parse_flags(&mut iter)?
+            }
             Event::Scalar { ref value, .. } if value == "tests" => tests = parse_tests(&mut iter)?,
-	    Event::MappingEnd => {break;}
+            Event::MappingEnd => {
+                break;
+            }
             _ => {
                 bail!("expected Scalar, got {:?}", event);
             }
@@ -220,16 +251,21 @@ fn main() -> Result<()> {
 	bail!("expected StreamEnd")
     };
 
-    let test_suite = TestSuite{ display_table, table, mode: test_mode, tests };
+    let test_suite = TestSuite {
+        display_table,
+        table,
+        mode: test_mode,
+        tests,
+    };
     let yaml = serde_yaml::to_string(&test_suite)?;
 
     match args.output {
-	Some(path) => {
-	    fs::write(path, yaml)?;
-	}
-	None => {
-	    println!("{}", yaml);
-	}
+        Some(path) => {
+            fs::write(path, yaml)?;
+        }
+        None => {
+            println!("{}", yaml);
+        }
     }
 
     Ok(())
