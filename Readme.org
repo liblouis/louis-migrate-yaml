@@ -1,0 +1,56 @@
+* louis-migrate-yaml
+
+A tool to migrate liblouis YAML files to a new normalized format.
+
+* Why
+
+While the existing liblouis YAML file format is very succinct it is
+not valid according to the [[https://yaml.org/spec/1.2.2][YAML spec]] because liblouis uses the same
+key in a mapping multiple times, i.e. the keys in a mapping are not
+unique. This is [[https://yaml.org/spec/1.2.2/#mapping][not allowed]].
+
+This is also the reason why [[https://serde.rs/][Serde]], the standard mechanism to read YAML
+files cannot be used to read the liblouis YAML files.
+
+The goal of this tool is to migrate the liblouis YAML format to a new
+valid YAML format.
+
+* How
+
+The [[https://github.com/liblouis/liblouis/blob/master/tools/lou_checkyaml.c][original C-based YAML parser]] can handle the liblouis YAML because
+it is an event based parser and has no problem with non-unique keys in
+mappings.
+
+So in theory we could enhance the C-based YAML tool to convert the
+YAML tests.
+
+Instead we decided to write a Rust-based tool based on the Rust
+[[https://docs.rs/libyaml/latest/libyaml/][libyaml bindings]].
+
+* Why not integrate this in the main liblouis Rust implementation?
+
+Instead of converting the liblouis YAML we could just use this
+implementation to run the YAML tests. Why separate it into a different
+tool?
+
+The main reason is the dependency on libyaml. We'd like to keep to
+pure Rust to make sure we can compile liblouis everywhere including
+[[https://www.rust-lang.org/what/wasm][WebAssembly]].
+
+Granted the newest version of the bindings uses [[https://crates.io/crates/unsafe-libyaml/0.2.9][unsafe-libyaml]], a
+version of libyaml that was transpiled to Rust, hence the bindings are
+no longer dependent on the C library. But it probably still is a big
+pile of unsafe code, not something you desperately want to depend on.
+
+If we keep the dependency in a separate tool, and migrate the YAML
+test files to a new format we can keep louis-rs in pure Rust.
+
+* Depend on libyaml after all but just for checking the YAML tests?
+
+We could as a provisional measure make louis-rs depend on libyaml and
+interprete the original YAML files directly to run the tests. This
+would certainly simplify the process. We could argue that only the
+~checkyaml~ functionality is really dependent on libyaml. We could in
+theory make this feature optional and hide it behind a feature. So
+only the checking of YAML files would maybe to be so easily portable.
+I might be willing to make that compromise.
