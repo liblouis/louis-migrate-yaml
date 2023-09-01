@@ -10,7 +10,7 @@ use libyaml::{self, Encoding, Event, ParserIter, ScalarStyle};
 
 use clap::Parser;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 
 /// A migration tool to "normalize" the liblouis yaml test files
 #[derive(Parser, Debug)]
@@ -330,7 +330,7 @@ fn main() -> Result<()> {
                 "tests" => {
 		    let test_suite = TestSuite {
 			display_table: display_table.clone(),
-			table: table.clone().expect("Table expected"),
+			table: table.clone().ok_or_else(|| anyhow!("No table defined for tests"))?,
 			mode: test_mode.clone(),
 			tests: parse_tests(&mut iter)?,
 		    };
