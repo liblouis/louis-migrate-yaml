@@ -43,9 +43,10 @@ enum Table {
     Inline {table: String}
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct TestSuite {
-    display_table: PathBuf,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    display_table: Option<PathBuf>,
     table: Table,
     mode: TestMode,
     tests: Vec<Test>,
@@ -301,19 +302,19 @@ fn main() -> Result<()> {
     read_mapping_start(&mut iter)?;
 
     let mut test_suites: Vec<TestSuite> = Vec::new();
-    let mut display_table = Default::default();
-    let mut table: Table = Default::default();
+    let mut display_table = None;
+    let mut table = None;
     let mut test_mode: TestMode = TestMode::Forward;
     let mut tests: Vec<Test> = Vec::new();
 
     while let Some(Ok(event)) = iter.next() {
         match event {
             Event::Scalar { value, .. } => match value.as_str() {
-                "display" => display_table = read_scalar(&mut iter)?.into(),
-                "table" => table = parse_table(&mut iter)?,
+                "display" => display_table = Some(read_scalar(&mut iter)?.into()),
+                "table" => table = Some(parse_table(&mut iter)?),
                 "flags" => test_mode = parse_flags(&mut iter)?,
                 "tests" => tests = parse_tests(&mut iter)?,
-                _ => bail!(""),
+                other => bail!("unknown key {:?}", other),
             },
             Event::MappingEnd => {
                 break;
@@ -329,7 +330,7 @@ fn main() -> Result<()> {
 
     let test_suite = TestSuite {
         display_table,
-        table,
+        table: table.expect("Missing table definition"),
         mode: test_mode,
         tests,
     };
