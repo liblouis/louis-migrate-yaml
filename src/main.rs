@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use std::{
-    collections::HashSet,
+    collections::{HashSet, HashMap},
     fs::{self, File},
     path::PathBuf,
 };
@@ -35,12 +35,12 @@ enum TestMode {
     HyphenateBraille,
 }
 
-#[derive(Debug, Default, Serialize)]
-struct Table {
-    language: String,
-    grade: u8,
-    system: String,
-    path: PathBuf,
+#[derive(Debug, Serialize)]
+enum Table {
+    Single {file: PathBuf},
+    List {files: Vec<PathBuf>},
+    MetaData {metadata: HashMap<String,String>},
+    Inline {table: String}
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -152,39 +152,38 @@ fn read_scalar(iter: &mut ParserIter) -> Result<String> {
     }
 }
 
-fn parse_table(iter: &mut ParserIter) -> Result<Table> {
-    read_mapping_start(iter)?;
-    let mut table: Table = Default::default();
+fn read_table_metadata(iter: &mut ParserIter) -> Result<Table> {
+    let mut metadata = HashMap::new();
     while let Some(Ok(event)) = iter.next() {
         match event {
             Event::Scalar { value, .. } => {
-                table = match value.as_str() {
-                    "language" => Table {
-                        language: read_scalar(iter)?,
-                        ..table
-                    },
-                    "grade" => Table {
-                        grade: read_scalar(iter)?.parse::<u8>()?,
-                        ..table
-                    },
-                    "system" => Table {
-                        system: read_scalar(iter)?,
-                        ..table
-                    },
-                    "__assert-match" => Table {
-                        path: read_scalar(iter)?.into(),
-                        ..table
-                    },
-                    _ => bail!("Expected table attribute, got {:?}", value),
-                };
-            }
+		metadata.insert(value, read_scalar(iter)?);
+                }
             Event::MappingEnd => {
                 break;
             }
             _ => bail!("Expected Scalar or MappingEnd, got {:?}", event),
         };
     }
-    Ok(table)
+    Ok(Table::MetaData{ metadata})
+}
+
+fn read_table_files(iter: &mut ParserIter) -> Result<Table> {
+    let mut files = Vec::new();
+    while let Some(Ok(event)) = iter.next() {
+        match event {
+            Event::Scalar { value, .. } => {
+		files.push(value.into());
+                }
+            Event::SequenceEnd => {
+                break;
+            }
+            _ => bail!("Expected Scalar or SequenceEnd, got {:?}", event),
+        };
+    }
+    Ok(Table::List{files})
+}
+
 }
 
 fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
