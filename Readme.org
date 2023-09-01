@@ -47,10 +47,10 @@ test files to a new format we can keep louis-rs in pure Rust.
 
 * Depend on libyaml after all but just for checking the YAML tests?
 
-We could as a provisional measure make louis-rs depend on libyaml and
-interprete the original YAML files directly to run the tests. This
-would certainly simplify the process. We could argue that only the
-~checkyaml~ functionality is really dependent on libyaml. We could in
-theory make this feature optional and hide it behind a feature. So
-only the checking of YAML files would maybe to be so easily portable.
-I might be willing to make that compromise.
+We could, as a provisional measure, make [[https://github.com/liblouis/louis-parser-nom][louis-rs]] depend on libyaml
+and interprete the original YAML files directly to run the tests. This
+would certainly simplify the process of the rewrite in Rust. We could
+argue that only the ~checkyaml~ functionality is really dependent on
+libyaml. We could also, in theory, make this feature optional and [[https://doc.rust-lang.org/cargo/reference/features.html][hide
+it behind a feature]]. So only the checking of YAML files would maybe to
+be so easily portable. I might be willing to make that compromise.
