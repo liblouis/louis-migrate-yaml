@@ -1,8 +1,9 @@
 use serde::Serialize;
 
 use std::{
+    collections::HashSet,
     fs::{self, File},
-    path::PathBuf, collections::HashSet,
+    path::PathBuf,
 };
 
 use libyaml::{self, Encoding, Event, ParserIter};
@@ -59,7 +60,7 @@ pub enum Mode {
     CompbrlLeftCursor,
     UcBrl,
     NoUndefined,
-    PartialTrans
+    PartialTrans,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -82,67 +83,65 @@ pub struct Test {
     #[serde(skip_serializing_if = "HashSet::is_empty")]
     mode: HashSet<Mode>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    max_output_length: Option<u16>
+    max_output_length: Option<u16>,
 }
 
 fn read_stream_start(iter: &mut ParserIter) -> Result<()> {
     match iter.next() {
-	Some(Ok(Event::StreamStart { encoding })) => {
-	    match encoding {
-		Some(Encoding::Utf8) => Ok(()),
-		_ => bail!("Encoding {:?} not supported", encoding)
-	    }
-	},
-	_ => bail!("Expected StreamStart")
+        Some(Ok(Event::StreamStart { encoding })) => match encoding {
+            Some(Encoding::Utf8) => Ok(()),
+            _ => bail!("Encoding {:?} not supported", encoding),
+        },
+        _ => bail!("Expected StreamStart"),
     }
 }
 
 fn read_stream_end(iter: &mut ParserIter) -> Result<()> {
     match iter.next() {
-	Some(Ok(Event::StreamEnd)) => Ok(()),
-	_ => bail!("Expected StreamEnd")
+        Some(Ok(Event::StreamEnd)) => Ok(()),
+        _ => bail!("Expected StreamEnd"),
     }
 }
 
 fn read_document_start(iter: &mut ParserIter) -> Result<()> {
     match iter.next() {
-	Some(Ok(Event::DocumentStart { .. })) => Ok(()),
-	_ => bail!("Expected DocumentStart")
+        Some(Ok(Event::DocumentStart { .. })) => Ok(()),
+        _ => bail!("Expected DocumentStart"),
     }
 }
 
 fn read_document_end(iter: &mut ParserIter) -> Result<()> {
     match iter.next() {
-	Some(Ok(Event::DocumentEnd { .. })) => Ok(()),
-	_ => bail!("Expected DocumentEnd")
+        Some(Ok(Event::DocumentEnd { .. })) => Ok(()),
+        _ => bail!("Expected DocumentEnd"),
     }
 }
 
 fn read_mapping_start(iter: &mut ParserIter) -> Result<()> {
     match iter.next() {
-	Some(Ok(Event::MappingStart { .. })) => Ok(()),
-	_ => bail!("Expected MappingStart")
+        Some(Ok(Event::MappingStart { .. })) => Ok(()),
+        _ => bail!("Expected MappingStart"),
     }
 }
 
 fn read_mapping_end(iter: &mut ParserIter) -> Result<()> {
     match iter.next() {
-	Some(Ok(Event::MappingEnd)) => Ok(()),
-	_ => bail!("Expected MappingEnd")
+        Some(Ok(Event::MappingEnd)) => Ok(()),
+        _ => bail!("Expected MappingEnd"),
     }
 }
 
 fn read_sequence_start(iter: &mut ParserIter) -> Result<()> {
     match iter.next() {
-	Some(Ok(Event::SequenceStart { .. })) => Ok(()),
-	_ => bail!("Expected SequenceStart")
+        Some(Ok(Event::SequenceStart { .. })) => Ok(()),
+        _ => bail!("Expected SequenceStart"),
     }
 }
 
 fn read_sequence_end(iter: &mut ParserIter) -> Result<()> {
     match iter.next() {
-	Some(Ok(Event::SequenceEnd)) => Ok(()),
-	_ => bail!("Expected SequenceEnd")
+        Some(Ok(Event::SequenceEnd)) => Ok(()),
+        _ => bail!("Expected SequenceEnd"),
     }
 }
 
@@ -240,40 +239,38 @@ fn parse_test(iter: &mut ParserIter) -> Result<Test> {
     let input = read_scalar(iter)?;
     let expected = read_scalar(iter)?;
     match iter.next() {
-	Some(Ok(Event::SequenceEnd)) => {
-	    Ok(Test {
-		input,
-		expected,
-		..Default::default()
-	    })
-	}
-	Some(Ok(Event::MappingStart { .. })) => {
-	    let mut xfail = false;
-	    while let Some(Ok(event)) = iter.next() {
-		match event {
-		    Event::Scalar { ref value, .. } if value == "xfail" => {
-			xfail = parse_xfail_value(iter)?;
-		    }
-		    Event::MappingEnd => {
-			break;
-		    }
-		    _ => {
-			bail!("expected Scalar or MappingEnd, got {:?}", event);
-		    }
-		}
-	    }
+        Some(Ok(Event::SequenceEnd)) => Ok(Test {
+            input,
+            expected,
+            ..Default::default()
+        }),
+        Some(Ok(Event::MappingStart { .. })) => {
+            let mut xfail = false;
+            while let Some(Ok(event)) = iter.next() {
+                match event {
+                    Event::Scalar { ref value, .. } if value == "xfail" => {
+                        xfail = parse_xfail_value(iter)?;
+                    }
+                    Event::MappingEnd => {
+                        break;
+                    }
+                    _ => {
+                        bail!("Expected Scalar or MappingEnd, got {:?}", event);
+                    }
+                }
+            }
 
-	    read_sequence_end(iter)?;
+            read_sequence_end(iter)?;
 
-	    Ok(Test {
-		input,
-		expected,
-		xfail,
-		..Default::default()
-	    })
-	    // handle options
-	}
-	_ => bail!("expected SequenceEnd or MappingStart")
+            Ok(Test {
+                input,
+                expected,
+                xfail,
+                ..Default::default()
+            })
+            // handle options
+        }
+        _ => bail!("Expected SequenceEnd or MappingStart"),
     }
 }
 
@@ -286,7 +283,7 @@ fn parse_tests(iter: &mut ParserIter) -> Result<Vec<Test>> {
             break;
         };
         let Event::SequenceStart { .. } = event else {
-	    bail!("expected SequenceStart, got {:?}", event)
+	    bail!("Expected SequenceStart, got {:?}", event)
 	};
         tests.push(parse_test(iter)?);
     }
