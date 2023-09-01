@@ -85,17 +85,76 @@ pub struct Test {
     max_output_length: Option<u16>
 }
 
-fn parse_display_table(iter: &mut ParserIter) -> Result<PathBuf> {
+fn read_stream_start(iter: &mut ParserIter) -> Result<()> {
     match iter.next() {
-        Some(Ok(Event::Scalar { value, .. })) => Ok(value.into()),
-        _ => bail!("expected Scalar for display"),
+	Some(Ok(Event::StreamStart { encoding })) => {
+	    match encoding {
+		Some(Encoding::Utf8) => Ok(()),
+		_ => bail!("Encoding {:?} not supported", encoding)
+	    }
+	},
+	_ => bail!("Expected StreamStart")
+    }
+}
+
+fn read_stream_end(iter: &mut ParserIter) -> Result<()> {
+    match iter.next() {
+	Some(Ok(Event::StreamEnd)) => Ok(()),
+	_ => bail!("Expected StreamEnd")
+    }
+}
+
+fn read_document_start(iter: &mut ParserIter) -> Result<()> {
+    match iter.next() {
+	Some(Ok(Event::DocumentStart { .. })) => Ok(()),
+	_ => bail!("Expected DocumentStart")
+    }
+}
+
+fn read_document_end(iter: &mut ParserIter) -> Result<()> {
+    match iter.next() {
+	Some(Ok(Event::DocumentEnd { .. })) => Ok(()),
+	_ => bail!("Expected DocumentEnd")
+    }
+}
+
+fn read_mapping_start(iter: &mut ParserIter) -> Result<()> {
+    match iter.next() {
+	Some(Ok(Event::MappingStart { .. })) => Ok(()),
+	_ => bail!("Expected MappingStart")
+    }
+}
+
+fn read_mapping_end(iter: &mut ParserIter) -> Result<()> {
+    match iter.next() {
+	Some(Ok(Event::MappingEnd)) => Ok(()),
+	_ => bail!("Expected MappingEnd")
+    }
+}
+
+fn read_sequence_start(iter: &mut ParserIter) -> Result<()> {
+    match iter.next() {
+	Some(Ok(Event::SequenceStart { .. })) => Ok(()),
+	_ => bail!("Expected SequenceStart")
+    }
+}
+
+fn read_sequence_end(iter: &mut ParserIter) -> Result<()> {
+    match iter.next() {
+	Some(Ok(Event::SequenceEnd)) => Ok(()),
+	_ => bail!("Expected SequenceEnd")
+    }
+}
+
+fn read_scalar(iter: &mut ParserIter) -> Result<String> {
+    match iter.next() {
+        Some(Ok(Event::Scalar { value, .. })) => Ok(value),
+        _ => bail!("Expected Scalar"),
     }
 }
 
 fn parse_table(iter: &mut ParserIter) -> Result<Table> {
-    let Some(Ok(Event::MappingStart { .. })) = iter.next() else {
-	bail!("expected MappingStart")
-    };
+    read_mapping_start(iter)?;
     let mut table: Table = Default::default();
     while let Some(Ok(event)) = iter.next() {
         match event {
@@ -149,9 +208,7 @@ fn parse_table(iter: &mut ParserIter) -> Result<Table> {
 }
 
 fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
-    let Some(Ok(Event::MappingStart { .. })) = iter.next() else {
-	bail!("expected MappingStart")
-    };
+    read_mapping_start(iter)?;
     match iter.next() {
 	Some(Ok(Event::Scalar { ref value, .. })) if value == "testmode" => {
 	    if let Some(Ok(event)) = iter.next() {
@@ -168,9 +225,7 @@ fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
 		    }
 		    _ => bail!("Testmode {:?} not supported", event),
 		};
-		let Some(Ok(Event::MappingEnd)) = iter.next() else {
-		    bail!("expected MappingEnd")
-		};
+		read_mapping_end(iter)?;
 		Ok(mode)
 	    } else {
 		bail!("expected Scalar");
@@ -184,25 +239,15 @@ fn parse_xfail_value(iter: &mut ParserIter) -> Result<bool> {
     let xfail = match iter.next() {
 	Some(Ok(Event::Scalar { value, .. })) if value == "off" => false,
 	Some(Ok(Event::Scalar { value, .. })) if value == "false" => false,
-	Some(Ok(Event::Scalar { value, .. })) => true,
+	Some(Ok(Event::Scalar { .. })) => true,
 	_ => bail!("expected scalar xfail value")
     };
     Ok(xfail)
 }
 
 fn parse_test(iter: &mut ParserIter) -> Result<Test> {
-    let input: String;
-    let expected: String;
-    if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-        input = value;
-    } else {
-        bail!("expected Scalar")
-    };
-    if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-        expected = value;
-    } else {
-        bail!("expected Scalar")
-    };
+    let input = read_scalar(iter)?;
+    let expected = read_scalar(iter)?;
     match iter.next() {
 	Some(Ok(Event::SequenceEnd)) => {
 	    Ok(Test {
@@ -226,9 +271,9 @@ fn parse_test(iter: &mut ParserIter) -> Result<Test> {
 		    }
 		}
 	    }
-	    let Some(Ok(Event::SequenceEnd)) = iter.next() else {
-	     	bail!("expected SequenceEnd")
-	    };
+
+	    read_sequence_end(iter)?;
+
 	    Ok(Test {
 		input,
 		expected,
@@ -243,9 +288,8 @@ fn parse_test(iter: &mut ParserIter) -> Result<Test> {
 
 fn parse_tests(iter: &mut ParserIter) -> Result<Vec<Test>> {
     let mut tests: Vec<Test> = Vec::new();
-    let Some(Ok(Event::SequenceStart { .. })) = iter.next() else {
-	bail!("expected SequenceStart")
-    };
+
+    read_sequence_start(iter)?;
     while let Some(Ok(event)) = iter.next() {
         if event == Event::SequenceEnd {
             break;
@@ -265,24 +309,9 @@ fn main() -> Result<()> {
     let parser = libyaml::Parser::new(reader)?;
     let mut iter = parser.into_iter();
 
-    if let Some(Ok(Event::StreamStart {
-        encoding: Some(encoding),
-    })) = iter.next()
-    {
-        if encoding != Encoding::Utf8 {
-            bail!("Encoding {:?} not supported", encoding);
-        }
-    } else {
-        bail!("Expected event")
-    };
-
-    let Some(Ok(Event::DocumentStart { .. })) = iter.next() else {
-	bail!("expected DocumentStart")
-    };
-
-    let Some(Ok(Event::MappingStart { .. })) = iter.next() else {
-	bail!("expected MappingStart")
-    };
+    read_stream_start(&mut iter)?;
+    read_document_start(&mut iter)?;
+    read_mapping_start(&mut iter)?;
 
     let mut test_suites: Vec<TestSuite> = Vec::new();
     let mut display_table = Default::default();
@@ -293,7 +322,7 @@ fn main() -> Result<()> {
     while let Some(Ok(event)) = iter.next() {
         match event {
             Event::Scalar { ref value, .. } if value == "display" => {
-                display_table = parse_display_table(&mut iter)?
+                display_table = read_scalar(&mut iter)?.into()
             }
             Event::Scalar { ref value, .. } if value == "table" => table = parse_table(&mut iter)?,
             Event::Scalar { ref value, .. } if value == "flags" => {
@@ -309,13 +338,8 @@ fn main() -> Result<()> {
         }
     }
 
-    let Some(Ok(Event::DocumentEnd { .. })) = iter.next() else {
-	bail!("expected DocumentEnd")
-    };
-
-    let Some(Ok(Event::StreamEnd)) = iter.next() else {
-	bail!("expected StreamEnd")
-    };
+    read_document_end(&mut iter)?;
+    read_stream_end(&mut iter)?;
 
     let test_suite = TestSuite {
         display_table,
