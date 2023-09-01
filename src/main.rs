@@ -158,50 +158,31 @@ fn parse_table(iter: &mut ParserIter) -> Result<Table> {
     let mut table: Table = Default::default();
     while let Some(Ok(event)) = iter.next() {
         match event {
-            Event::Scalar { ref value, .. } if value == "language" => {
-                if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-                    table = Table {
-                        language: value,
+            Event::Scalar { value, .. } => {
+                table = match value.as_str() {
+                    "language" => Table {
+                        language: read_scalar(iter)?,
                         ..table
-                    }
-                } else {
-                    bail!("Epected Scalar");
-                }
-            }
-            Event::Scalar { ref value, .. } if value == "grade" => {
-                if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-                    table = Table {
-                        grade: value.parse::<u8>()?,
+                    },
+                    "grade" => Table {
+                        grade: read_scalar(iter)?.parse::<u8>()?,
                         ..table
-                    }
-                } else {
-                    bail!("Epected Scalar");
-                }
-            }
-            Event::Scalar { ref value, .. } if value == "system" => {
-                if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-                    table = Table {
-                        system: value,
+                    },
+                    "system" => Table {
+                        system: read_scalar(iter)?,
                         ..table
-                    };
-                } else {
-                    bail!("Epected Scalar");
-                }
-            }
-            Event::Scalar { ref value, .. } if value == "__assert-match" => {
-                if let Some(Ok(Event::Scalar { value, .. })) = iter.next() {
-                    table = Table {
-                        path: value.into(),
+                    },
+                    "__assert-match" => Table {
+                        path: read_scalar(iter)?.into(),
                         ..table
-                    };
-                } else {
-                    bail!("Epected Scalar");
-                }
+                    },
+                    _ => bail!("Expected table attribute, got {:?}", value),
+                };
             }
             Event::MappingEnd => {
                 break;
             }
-            _ => bail!("Event {:?}", event),
+            _ => bail!("Expected Scalar or MappingEnd, got {:?}", event),
         };
     }
     Ok(table)
@@ -210,37 +191,47 @@ fn parse_table(iter: &mut ParserIter) -> Result<Table> {
 fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
     read_mapping_start(iter)?;
     match iter.next() {
-	Some(Ok(Event::Scalar { ref value, .. })) if value == "testmode" => {
-	    if let Some(Ok(event)) = iter.next() {
-		let mode = match event {
-		    Event::Scalar { ref value, .. } if value == "forward" => TestMode::Forward,
-		    Event::Scalar { ref value, .. } if value == "backward" => TestMode::Backward,
-		    Event::Scalar { ref value, .. } if value == "bothDirections" => {
-			TestMode::BothDirections
-		    }
-		    Event::Scalar { ref value, .. } if value == "display" => TestMode::Display,
-		    Event::Scalar { ref value, .. } if value == "hyphenate" => TestMode::Hyphenate,
-		    Event::Scalar { ref value, .. } if value == "hyphenateBraille" => {
-			TestMode::HyphenateBraille
-		    }
-		    _ => bail!("Testmode {:?} not supported", event),
-		};
-		read_mapping_end(iter)?;
-		Ok(mode)
-	    } else {
-		bail!("expected Scalar");
-	    }
-	}
-	_ => bail!("expected Scalar testmode")
+        Some(Ok(Event::Scalar { ref value, .. })) if value == "testmode" => match iter.next() {
+            Some(Ok(Event::Scalar { value, .. })) => {
+                let mode = match value.as_str() {
+                    "backward" => TestMode::Backward,
+                    "bothDirections" => TestMode::BothDirections,
+                    "display" => TestMode::Display,
+                    "hyphenate" => TestMode::Hyphenate,
+                    "hyphenateBraille" => TestMode::HyphenateBraille,
+                    _ => bail!("Testmode {:?} not supported", value),
+                };
+                read_mapping_end(iter)?;
+                Ok(mode)
+            }
+            _ => bail!("Expected Scalar"),
+        },
+        _ => bail!("Expected Scalar testmode"),
+    }
+}
+
+fn read_xfail_value(value: String) -> bool {
+    match value.as_str() {
+        "off" => false,
+        "false" => false,
+        _ => true,
     }
 }
 
 fn parse_xfail_value(iter: &mut ParserIter) -> Result<bool> {
     let xfail = match iter.next() {
-	Some(Ok(Event::Scalar { value, .. })) if value == "off" => false,
-	Some(Ok(Event::Scalar { value, .. })) if value == "false" => false,
-	Some(Ok(Event::Scalar { .. })) => true,
-	_ => bail!("expected scalar xfail value")
+        Some(Ok(Event::Scalar { value, .. })) => read_xfail_value(value),
+        Some(Ok(Event::MappingStart { .. })) => {
+            match read_scalar(iter)?.as_str() {
+                "forward" => (),
+                "backward" => (),
+                other => bail!("Expected 'forward' or 'backward', got {:?}", other),
+            };
+            let xfail = read_xfail_value(read_scalar(iter)?);
+            read_mapping_end(iter)?;
+            xfail
+        }
+        other => bail!("Expected scalar xfail value, got {:?}", other),
     };
     Ok(xfail)
 }
@@ -321,14 +312,13 @@ fn main() -> Result<()> {
 
     while let Some(Ok(event)) = iter.next() {
         match event {
-            Event::Scalar { ref value, .. } if value == "display" => {
-                display_table = read_scalar(&mut iter)?.into()
-            }
-            Event::Scalar { ref value, .. } if value == "table" => table = parse_table(&mut iter)?,
-            Event::Scalar { ref value, .. } if value == "flags" => {
-                test_mode = parse_flags(&mut iter)?
-            }
-            Event::Scalar { ref value, .. } if value == "tests" => tests = parse_tests(&mut iter)?,
+            Event::Scalar { value, .. } => match value.as_str() {
+                "display" => display_table = read_scalar(&mut iter)?.into(),
+                "table" => table = parse_table(&mut iter)?,
+                "flags" => test_mode = parse_flags(&mut iter)?,
+                "tests" => tests = parse_tests(&mut iter)?,
+                _ => bail!(""),
+            },
             Event::MappingEnd => {
                 break;
             }
