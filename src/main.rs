@@ -35,7 +35,7 @@ enum TestMode {
     HyphenateBraille,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 enum Table {
     Single {file: PathBuf},
     List {files: Vec<PathBuf>},
@@ -320,7 +320,6 @@ fn main() -> Result<()> {
     let mut display_table = None;
     let mut table = None;
     let mut test_mode: TestMode = TestMode::Forward;
-    let mut tests: Vec<Test> = Vec::new();
 
     while let Some(Ok(event)) = iter.next() {
         match event {
@@ -328,7 +327,15 @@ fn main() -> Result<()> {
                 "display" => display_table = Some(read_scalar(&mut iter)?.into()),
                 "table" => table = Some(parse_table(&mut iter)?),
                 "flags" => test_mode = parse_flags(&mut iter)?,
-                "tests" => tests = parse_tests(&mut iter)?,
+                "tests" => {
+		    let test_suite = TestSuite {
+			display_table: display_table.clone(),
+			table: table.clone().expect("Table expected"),
+			mode: test_mode.clone(),
+			tests: parse_tests(&mut iter)?,
+		    };
+		    test_suites.push(test_suite);
+		},
                 other => bail!("unknown key {:?}", other),
             },
             Event::MappingEnd => {
@@ -342,15 +349,6 @@ fn main() -> Result<()> {
 
     read_document_end(&mut iter)?;
     read_stream_end(&mut iter)?;
-
-    let test_suite = TestSuite {
-        display_table,
-        table: table.expect("Missing table definition"),
-        mode: test_mode,
-        tests,
-    };
-
-    test_suites.push(test_suite);
 
     let yaml = serde_yaml::to_string(&test_suites)?;
 
