@@ -64,16 +64,35 @@ pub enum Mode {
     PartialTrans,
 }
 
-fn is_false(b: &bool) -> bool {
-    !(*b)
+#[derive(Debug, Serialize)]
+enum Xfail {
+    Scalar{xfail: bool},
+    Reason{reason: String},
+    Map{forward: bool, backward: bool}
+}
+
+impl Xfail {
+    fn is_false(&self) -> bool {
+	match self {
+	    Self::Scalar { xfail } => !(*xfail),
+	    Self::Reason { .. } => false,
+	    Self::Map { forward, backward } => !(*forward || *backward)
+	}
+    }
+}
+
+impl Default for Xfail {
+    fn default() -> Self {
+        Xfail::Scalar{ xfail: false}
+    }
 }
 
 #[derive(Debug, Default, Serialize)]
 pub struct Test {
     input: String,
     expected: String,
-    #[serde(skip_serializing_if = "is_false")]
-    xfail: bool,
+    #[serde(skip_serializing_if = "Xfail::is_false")]
+    xfail: Xfail,
     // FIXME: add support for typeform:
     #[serde(skip_serializing_if = "Vec::is_empty")]
     input_pos: Vec<u16>,
@@ -227,26 +246,38 @@ fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
     }
 }
 
-fn read_xfail_value(value: String) -> bool {
+fn read_xfail_value(value: String) -> Xfail {
     match value.as_str() {
-        "off" => false,
-        "false" => false,
-        _ => true,
+        "off"| "false" => Xfail::Scalar{xfail: false},
+        "on" | "true" => Xfail::Scalar{xfail: true},
+        _ => Xfail::Reason{reason: value},
     }
 }
 
-fn parse_xfail_value(iter: &mut ParserIter) -> Result<bool> {
+fn parse_xfail_value(iter: &mut ParserIter) -> Result<Xfail> {
     let xfail = match iter.next() {
         Some(Ok(Event::Scalar { value, .. })) => read_xfail_value(value),
         Some(Ok(Event::MappingStart { .. })) => {
-            match read_scalar(iter)?.as_str() {
-                "forward" => (),
-                "backward" => (),
-                other => bail!("Expected 'forward' or 'backward', got {:?}", other),
-            };
-            let xfail = read_xfail_value(read_scalar(iter)?);
-            read_mapping_end(iter)?;
-            xfail
+	    let mut forward = false;
+	    let mut backward = false;
+            while let Some(Ok(event)) = iter.next() {
+                match event {
+                    Event::Scalar { value, .. } => {
+			match value.as_str() {
+			    "forward" => forward = !matches!(read_scalar(iter)?.as_str(), "off" | "false" ),
+			    "backward" => backward = !matches!(read_scalar(iter)?.as_str(), "off" | "false" ),
+			    other => bail!("Expected 'forward' or 'backward', got {:?}", other),
+			};
+                    }
+                    Event::MappingEnd => {
+                        break;
+                    }
+                    _ => {
+                        bail!("Expected Scalar or MappingEnd, got {:?}", event);
+                    }
+		}
+	    }
+            Xfail::Map{forward, backward}
         }
         other => bail!("Expected scalar xfail value, got {:?}", other),
     };
@@ -263,7 +294,7 @@ fn parse_test(iter: &mut ParserIter) -> Result<Test> {
             ..Default::default()
         }),
         Some(Ok(Event::MappingStart { .. })) => {
-            let mut xfail = false;
+            let mut xfail = Default::default();
             while let Some(Ok(event)) = iter.next() {
                 match event {
                     Event::Scalar { ref value, .. } if value == "xfail" => {
@@ -273,7 +304,7 @@ fn parse_test(iter: &mut ParserIter) -> Result<Test> {
                         break;
                     }
                     _ => {
-                        bail!("Expected Scalar or MappingEnd, got {:?}", event);
+                        bail!("Expected Scalar or MappingEnd inside test, got {:?}", event);
                     }
                 }
             }
