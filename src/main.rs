@@ -207,6 +207,7 @@ fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
         Some(Ok(Event::Scalar { ref value, .. })) if value == "testmode" => match iter.next() {
             Some(Ok(Event::Scalar { value, .. })) => {
                 let mode = match value.as_str() {
+                    "forward" => TestMode::Forward,
                     "backward" => TestMode::Backward,
                     "bothDirections" => TestMode::BothDirections,
                     "display" => TestMode::Display,
