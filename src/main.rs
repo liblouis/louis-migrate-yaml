@@ -6,7 +6,7 @@ use std::{
     path::PathBuf,
 };
 
-use libyaml::{self, Encoding, Event, ParserIter};
+use libyaml::{self, Encoding, Event, ParserIter, ScalarStyle};
 
 use clap::Parser;
 
@@ -185,6 +185,20 @@ fn read_table_files(iter: &mut ParserIter) -> Result<Table> {
     Ok(Table::List{files})
 }
 
+fn parse_table(iter: &mut ParserIter) -> Result<Table> {
+    match iter.next() {
+	Some(Ok(event)) => match event {
+	    Event::MappingStart { .. } => read_table_metadata(iter),
+	    Event::Scalar { value, style, ..} => match style {
+		Some(ScalarStyle::Plain) => Ok(Table::Single{file: value.into()}),
+		Some(ScalarStyle::Literal) => Ok(Table::Inline{ table: value }),
+		other => bail!("Scalar of style {:?} not supported", other)
+	    }
+	    Event::SequenceStart { .. } => read_table_files(iter),
+	    other => bail!("Expected Scalar, MappingStart or SequenceStart, got {:?}", other)
+	}
+	other => bail!("Invalid event {:?}", other)
+    }
 }
 
 fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
