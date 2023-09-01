@@ -1,7 +1,7 @@
 use serde::Serialize;
 
 use std::{
-    collections::{HashSet, HashMap},
+    collections::{HashMap, HashSet},
     fs::{self, File},
     path::PathBuf,
 };
@@ -37,10 +37,10 @@ enum TestMode {
 
 #[derive(Debug, Serialize, Clone)]
 enum Table {
-    Single {file: PathBuf},
-    List {files: Vec<PathBuf>},
-    MetaData {metadata: HashMap<String,String>},
-    Inline {table: String}
+    Single { file: PathBuf },
+    List { files: Vec<PathBuf> },
+    MetaData { metadata: HashMap<String, String> },
+    Inline { table: String },
 }
 
 #[derive(Debug, Serialize)]
@@ -158,15 +158,15 @@ fn read_table_metadata(iter: &mut ParserIter) -> Result<Table> {
     while let Some(Ok(event)) = iter.next() {
         match event {
             Event::Scalar { value, .. } => {
-		metadata.insert(value, read_scalar(iter)?);
-                }
+                metadata.insert(value, read_scalar(iter)?);
+            }
             Event::MappingEnd => {
                 break;
             }
             _ => bail!("Expected Scalar or MappingEnd, got {:?}", event),
         };
     }
-    Ok(Table::MetaData{ metadata})
+    Ok(Table::MetaData { metadata })
 }
 
 fn read_table_files(iter: &mut ParserIter) -> Result<Table> {
@@ -174,30 +174,33 @@ fn read_table_files(iter: &mut ParserIter) -> Result<Table> {
     while let Some(Ok(event)) = iter.next() {
         match event {
             Event::Scalar { value, .. } => {
-		files.push(value.into());
-                }
+                files.push(value.into());
+            }
             Event::SequenceEnd => {
                 break;
             }
             _ => bail!("Expected Scalar or SequenceEnd, got {:?}", event),
         };
     }
-    Ok(Table::List{files})
+    Ok(Table::List { files })
 }
 
 fn parse_table(iter: &mut ParserIter) -> Result<Table> {
     match iter.next() {
-	Some(Ok(event)) => match event {
-	    Event::MappingStart { .. } => read_table_metadata(iter),
-	    Event::Scalar { value, style, ..} => match style {
-		Some(ScalarStyle::Plain) => Ok(Table::Single{file: value.into()}),
-		Some(ScalarStyle::Literal) => Ok(Table::Inline{ table: value }),
-		other => bail!("Scalar of style {:?} not supported", other)
-	    }
-	    Event::SequenceStart { .. } => read_table_files(iter),
-	    other => bail!("Expected Scalar, MappingStart or SequenceStart, got {:?}", other)
-	}
-	other => bail!("Invalid event {:?}", other)
+        Some(Ok(event)) => match event {
+            Event::MappingStart { .. } => read_table_metadata(iter),
+            Event::Scalar { value, style, .. } => match style {
+                Some(ScalarStyle::Plain) => Ok(Table::Single { file: value.into() }),
+                Some(ScalarStyle::Literal) => Ok(Table::Inline { table: value }),
+                other => bail!("Scalar of style {:?} not supported", other),
+            },
+            Event::SequenceStart { .. } => read_table_files(iter),
+            other => bail!(
+                "Expected Scalar, MappingStart or SequenceStart, got {:?}",
+                other
+            ),
+        },
+        other => bail!("Invalid event {:?}", other),
     }
 }
 
@@ -328,14 +331,16 @@ fn main() -> Result<()> {
                 "table" => table = Some(parse_table(&mut iter)?),
                 "flags" => test_mode = parse_flags(&mut iter)?,
                 "tests" => {
-		    let test_suite = TestSuite {
-			display_table: display_table.clone(),
-			table: table.clone().ok_or_else(|| anyhow!("No table defined for tests"))?,
-			mode: test_mode.clone(),
-			tests: parse_tests(&mut iter)?,
-		    };
-		    test_suites.push(test_suite);
-		},
+                    let test_suite = TestSuite {
+                        display_table: display_table.clone(),
+                        table: table
+                            .clone()
+                            .ok_or_else(|| anyhow!("No table defined for tests"))?,
+                        mode: test_mode.clone(),
+                        tests: parse_tests(&mut iter)?,
+                    };
+                    test_suites.push(test_suite);
+                }
                 other => bail!("unknown key {:?}", other),
             },
             Event::MappingEnd => {
