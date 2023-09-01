@@ -74,7 +74,7 @@ pub struct Test {
     expected: String,
     #[serde(skip_serializing_if = "is_false")]
     xfail: bool,
-    //    typeform:
+    // FIXME: add support for typeform:
     #[serde(skip_serializing_if = "Vec::is_empty")]
     input_pos: Vec<u16>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
