@@ -36,11 +36,12 @@ enum TestMode {
 }
 
 #[derive(Debug, Serialize, Clone)]
+#[serde(untagged)]
 enum Table {
-    Single { file: PathBuf },
-    List { files: Vec<PathBuf> },
-    MetaData { metadata: HashMap<String, String> },
-    Inline { table: String },
+    Single (PathBuf),
+    List (Vec<PathBuf>),
+    MetaData (HashMap<String, String>),
+    Inline (String),
 }
 
 #[derive(Debug, Serialize)]
@@ -65,17 +66,18 @@ pub enum Mode {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(untagged)]
 enum Xfail {
-    Scalar{xfail: bool},
-    Reason{reason: String},
+    Scalar( bool),
+    Reason(String),
     Map{forward: bool, backward: bool}
 }
 
 impl Xfail {
     fn is_false(&self) -> bool {
 	match self {
-	    Self::Scalar { xfail } => !(*xfail),
-	    Self::Reason { .. } => false,
+	    Self::Scalar ( xfail ) => !(*xfail),
+	    Self::Reason ( .. ) => false,
 	    Self::Map { forward, backward } => !(*forward || *backward)
 	}
     }
@@ -83,7 +85,7 @@ impl Xfail {
 
 impl Default for Xfail {
     fn default() -> Self {
-        Xfail::Scalar{ xfail: false}
+        Xfail::Scalar( false)
     }
 }
 
@@ -185,7 +187,7 @@ fn read_table_metadata(iter: &mut ParserIter) -> Result<Table> {
             _ => bail!("Expected Scalar or MappingEnd, got {:?}", event),
         };
     }
-    Ok(Table::MetaData { metadata })
+    Ok(Table::MetaData (metadata))
 }
 
 fn read_table_files(iter: &mut ParserIter) -> Result<Table> {
@@ -201,7 +203,7 @@ fn read_table_files(iter: &mut ParserIter) -> Result<Table> {
             _ => bail!("Expected Scalar or SequenceEnd, got {:?}", event),
         };
     }
-    Ok(Table::List { files })
+    Ok(Table::List (files ))
 }
 
 fn parse_table(iter: &mut ParserIter) -> Result<Table> {
@@ -209,8 +211,8 @@ fn parse_table(iter: &mut ParserIter) -> Result<Table> {
         Some(Ok(event)) => match event {
             Event::MappingStart { .. } => read_table_metadata(iter),
             Event::Scalar { value, style, .. } => match style {
-                Some(ScalarStyle::Plain) => Ok(Table::Single { file: value.into() }),
-                Some(ScalarStyle::Literal) => Ok(Table::Inline { table: value }),
+                Some(ScalarStyle::Plain) => Ok(Table::Single (value.into())),
+                Some(ScalarStyle::Literal) => Ok(Table::Inline (value)),
                 other => bail!("Scalar of style {:?} not supported", other),
             },
             Event::SequenceStart { .. } => read_table_files(iter),
@@ -248,9 +250,9 @@ fn parse_flags(iter: &mut ParserIter) -> Result<TestMode> {
 
 fn read_xfail_value(value: String) -> Xfail {
     match value.as_str() {
-        "off"| "false" => Xfail::Scalar{xfail: false},
-        "on" | "true" => Xfail::Scalar{xfail: true},
-        _ => Xfail::Reason{reason: value},
+        "off"| "false" => Xfail::Scalar(false),
+        "on" | "true" => Xfail::Scalar(true),
+        _ => Xfail::Reason(value),
     }
 }
 
